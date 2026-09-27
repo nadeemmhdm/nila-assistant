@@ -1,0 +1,1 @@
+Open-source Windows AI assistant powered by llama.cpp. Download and manage GGUF models, choose your assistant's name, and chat locally through CLI or Web UI.

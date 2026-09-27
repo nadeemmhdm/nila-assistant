@@ -1,0 +1,43 @@
+name: Windows build and tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Test core
+        run: python -m unittest discover -s tests -v
+      - name: Validate installer syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/setup.ps1", [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+      - name: Build standalone Windows launcher
+        run: |
+          python -m pip install pyinstaller==6.16.0
+          python -m PyInstaller --noconfirm --clean --onefile --name LocalAssistant --add-data "runtime.json;." main.py
+      - name: Smoke test executable
+        run: .\dist\LocalAssistant.exe --help
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item Setup.cmd,setup.ps1,README.md,LICENSE,THIRD_PARTY.md dist
+          Compress-Archive -Path dist/* -DestinationPath LocalAssistant-Windows-x64.zip
+          (Get-FileHash LocalAssistant-Windows-x64.zip -Algorithm SHA256).Hash | Set-Content SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocalAssistant-Windows-x64
+          path: |
+            LocalAssistant-Windows-x64.zip
+            SHA256.txt
