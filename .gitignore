@@ -13,3 +13,9 @@ dist/
 config.json
 server.log
 webui.json
+
+*.dpapi
+*.wav
+speech-env/
+voices/
+launcher.lock

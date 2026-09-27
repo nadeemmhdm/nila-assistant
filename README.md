@@ -5,170 +5,225 @@
 [![Windows build](https://github.com/nadeemmhdm/nila-assistant/actions/workflows/windows.yml/badge.svg)](https://github.com/nadeemmhdm/nila-assistant/actions/workflows/windows.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Nila Assistant is an open-source Windows application for managing local GGUF models
-and chatting through llama.cpp. **Nila is the project name; you choose your personal
-assistant's name during setup.**
+A Windows x64 local AI assistant powered by llama.cpp, with model management,
+streaming chat, encrypted optional memory, and downloadable offline speech voices.
+**Nila is the project name; choose your personal assistant's name during setup.**
 
-**Status:** v0.1.0 preview. Core tests are available; full Windows installation and
-real-model smoke testing must be completed before calling a release production-ready.
+**Version 0.2.0 — preview.** No Ollama or cloud inference API is required.
 
-[Download source ZIP](https://github.com/nadeemmhdm/nila-assistant/archive/refs/heads/main.zip) ·
+[Source ZIP](https://github.com/nadeemmhdm/nila-assistant/archive/refs/heads/main.zip) ·
 [Windows builds](https://github.com/nadeemmhdm/nila-assistant/actions/workflows/windows.yml) ·
-[Report a bug](https://github.com/nadeemmhdm/nila-assistant/issues) ·
-[Security policy](SECURITY.md)
+[Issues](https://github.com/nadeemmhdm/nila-assistant/issues) · [Security](SECURITY.md)
 
-## Overview
+## Features
 
-An open-source local AI launcher. Choose your assistant's name during setup.
-Download or import a single-file GGUF model, then chat through the native
-**llama.cpp CLI or llama.cpp Web UI**. No Ollama, cloud inference API, API key,
-voice mode, computer control, or agent tools are part of this release.
+| Area | Included |
+| --- | --- |
+| Models | Download starter models or direct GGUF URLs; import, select, load, unload and delete |
+| Chat | Token streaming in Nila desktop Chat and enhanced CLI; native llama.cpp interfaces remain available |
+| Memory | Bounded recent exchanges and up to 50 explicit saved facts; inspect, forget, clear |
+| Persistence | Opt-in Windows CurrentUser DPAPI encryption for saved Nila chat/facts |
+| Speech | Incremental sentence/phrase playback while generation continues; stop speech independently |
+| Voices | Download English Amy/ Lessac and Malayalam Meera Piper voices |
+| Settings | Context, CPU threads, batches, loading mode, warmup, startup loading, reply limit, memory capacity and speech rate |
+| Local API | Loopback binding and a random session API key; no shell/file tools enabled |
 
-## Easy setup (source ZIP)
+## Install and start
 
-1. Extract the entire ZIP to a folder.
-2. Double-click **Setup.cmd**. It installs the launcher for your Windows user
-   and creates a desktop shortcut. If needed, it offers to install Python 3.12
-   via Windows Package Manager. No pip packages are needed to run the source.
-3. In the setup screen, enter **any assistant name** and click **Save assistant name**.
-4. Click **Install llama.cpp runtime** (internet required once).
-5. Open **Models**. Review a starter model's card/license and download it,
-   or choose **Import existing GGUF**. Imports copy the file; the original is retained.
-6. Return to **Setup & Chat**, select your model, and open **Web Chat** or **CLI Chat**.
-7. **Unload model / Stop chat** releases model memory. Keep the manager open during chat.
+### Windows executable
 
-Windows x64 Intel/AMD only. Python 3.10+ with Tkinter is supported. CPU-only defaults:
-4 or fewer threads, 2,048 context tokens, batch 128, one active model.
-8 GB RAM can be used with small quantized models; usable capacity depends on
-Windows, other apps, the model and context length. Large models are not automatically
-made compatible with limited RAM. Model language quality varies, including Malayalam.
+Open a **successful Windows build** from the builds link above. Download its
+`LocalAssistant-Windows-x64` artifact, extract the inner ZIP, and run **Setup.cmd**.
+The executable includes the launcher runtime. Optional Piper speech may install
+Python 3.12 separately. GitHub Actions artifact downloads require GitHub sign-in.
 
-## Native chat and the assistant name
+### Source ZIP
 
-The launcher passes your chosen identity through `-sys` to llama-cli, and
-`systemMessage` in a generated UI config to llama-server. It also sets the model
-alias to your name. Models can still fail to follow a system prompt.
+Extract the source ZIP and double-click **Setup.cmd**. The setup script detects
+Python with Tkinter, offers a per-user Python installation through winget if needed,
+and creates a desktop shortcut. Core chat needs no third-party Python packages.
 
-The Web UI uses upstream llama.cpp branding and browser storage. Its saved user
-preferences can override server defaults. After a rename, start a new chat. If an
-old identity persists, use **Settings → Copy assistant identity prompt** in this
-launcher and paste it into the native Web UI's system-message settings.
+1. **Setup:** enter an assistant name and save it.
+2. Install the llama.cpp runtime.
+3. **Models:** review the model card/license, then download or import a single-file GGUF.
+4. **Setup:** select it and click **Load model → Nila Chat**.
+5. **Chat:** type a message; output appears as it is generated.
+6. Use **Unload model** to release model memory.
 
-Web conversations are stored by the native UI in your browser, not GitHub. Use
-its export feature for backups. CLI transcript persistence is not provided by
-this launcher. Clearing browser data can remove chats. Changing the local port
-changes the browser origin and therefore the visible history.
+For an 8 GB CPU laptop, begin with a small quantized model, 2,048 context tokens and
+short replies. Model ability, Malayalam quality and speed vary by hardware/model.
 
-## Model management
+### Download and setup using PowerShell
 
-- Starter catalog with links to model cards.
-- Public HTTPS direct GGUF download URLs (including Hugging Face resolve URLs).
-- Existing local single-file GGUF imports.
-- Select / launch / unload / delete a managed model.
-- Download progress, cancellation, disk-space checks and atomic file installation.
-- Runtime SHA-256 verification. Custom model downloads are checked for GGUF magic
-  and transfer completeness; their computed hash is recorded, but **not authenticated
-  against the model publisher**. Only llama.cpp can validate full model compatibility.
-- Failed downloads are removed; resume is not implemented in v0.1.
-- Gated/private models: download them yourself according to their terms, then import.
-- Split/sharded GGUF, vision projectors and non-GGUF weights are not supported.
-
-Internet is needed for installing Python/runtime and downloading models. Once
-installed, the launcher makes no network request when opening CLI chat; browser
-chat communicates with the local llama-server on `127.0.0.1`. Optional native Web UI
-integrations should remain disabled for offline use. No server tool flags are enabled.
-
-## CLI
-
-From a source checkout with Python installed:
+Run in a folder where you want to extract the source:
 
 ```powershell
-python main.py setup
-python main.py models
-python main.py import "C:\Models\my-model.gguf"
-python main.py chat
-python main.py web
-python main.py download "https://huggingface.co/OWNER/REPO/resolve/main/MODEL.gguf"
-python main.py delete "my-model.gguf"
+Invoke-WebRequest 'https://github.com/nadeemmhdm/nila-assistant/archive/refs/heads/main.zip' -OutFile 'nila-assistant.zip'
+Expand-Archive '.\nila-assistant.zip' -DestinationPath '.\nila-source'
+& '.\nila-source\nila-assistant-main\Setup.cmd'
 ```
 
-For a built executable replace `python main.py` with `.\LocalAssistant.exe`.
-Run without arguments to open the desktop manager. Exit CLI chat using the native
-CLI controls or close its console. An OS-held lock prevents multiple managers from modifying the same data directory.
-Close the desktop manager before using a CLI management command.
+Or from a source checkout with Python installed:
 
-## Storage and uninstall
+```powershell
+python main.py setup --name "Nila" --model small
+python main.py chat
+```
+
+This downloads the pinned Windows CPU runtime and the small starter model. Existing
+matching model downloads are reused by setup. Replace `small` with `balanced` or a
+public direct GGUF URL. Internet is needed for initial software/model/voice downloads.
+
+## Memory and user data
+
+Nila Chat keeps recent exchanges in RAM. **Persistence is OFF by default.** Enable
+**Save encrypted memory between sessions** in Settings to retain facts and conversation
+history. The encrypted `memory.dpapi` file is bound to your Windows account; there is
+no plaintext fallback if encryption/decryption fails.
+
+- **Memory → Add memory fact:** explicitly choose what should be remembered.
+- **Forget selected fact:** remove one fact.
+- **Clear all Nila memory:** remove facts and history.
+- **New chat:** clear conversation history but preserve facts.
+- **Remembered exchanges:** limits recent complete user/assistant pairs (default 12).
+- **Saved memory cap:** limits serialized memory payload (default 256 KB).
+- **Include conversation and facts:** controls whether stored context is sent to the model;
+  it is separate from persistence.
+
+Older conversation pairs are dropped when they exceed the configured capacity or the
+active model's token budget. The current prompt is token-counted using llama.cpp's
+chat template and tokenizer. Saved facts are never silently discarded to fit a prompt;
+if facts/current input are too long, shorten them or increase context and reload.
+
+Settings, model/voice files and assistant name are not encrypted. Nila memory encryption
+does not protect against software running as your Windows account or a compromised OS.
+Clear removes the app's file; it is not forensic secure erasure of disks/backups.
+Diagnostic server logs are OFF by default and may contain sensitive information if enabled.
+No response audio files are written; synthesis and playback use RAM.
+
+**Native Web UI history is separate browser storage, not DPAPI-encrypted Nila memory.**
+Memory and auto-speech integration apply to Nila Chat and the enhanced CLI, not to the
+upstream native Web UI or native CLI. Clear/export native browser data there separately.
+
+## Offline speech
+
+1. Open **Voice → Install speech engine**. This installs optional Piper 1.8.0 into
+   an isolated local Python environment. Review the GPL dependency notice below.
+2. Select a voice, open its model card/license, then **Download selected voice**.
+3. Click **Use selected voice** and **Test voice**.
+4. Unload the model if necessary. In Settings, enable **Speak while generating** and Save.
+5. Reload the model and use Nila Chat.
+
+| Voice ID | Language |
+| --- | --- |
+| `en_US-amy-low` | English |
+| `en_US-lessac-medium` | English |
+| `ml_IN-meera-medium` | Malayalam |
+
+Choose the appropriate voice yourself; automatic language switching is not implemented.
+English voices are not a substitute for a Malayalam voice. Audio begins when a sentence
+or bounded phrase arrives and has been synthesized, not literally on the first token.
+The voice worker remains loaded between sentences. It skips fenced code and reasoning
+fields, preserves sentence order, and stops speech if its bounded queue falls behind.
+Use **Stop speech only** to stop playback without cancelling the text response.
+
+TTS competes with inference for CPU/RAM. Streaming improves perceived responsiveness;
+it does not guarantee higher model tokens/second. Lower maximum reply tokens/history,
+use a smaller model, or disable speech when generation speed matters most.
+
+## CLI reference
+
+Use `.\LocalAssistant.exe` instead of `python main.py` for the standalone build.
+Close the GUI before running a separate CLI process; an OS-held lock prevents concurrent
+managers from modifying the same data.
+
+```powershell
+python main.py setup --name "Nila" --model small --speech --voice ml_IN-meera-medium
+python main.py models
+python main.py download balanced
+python main.py import "C:\Models\my-model.gguf"
+python main.py chat --model "my-model.gguf" --speak
+python main.py settings list
+python main.py settings set context 4096
+python main.py settings set persist_memory true
+python main.py memory add "Prefer Malayalam answers."
+python main.py memory list
+python main.py memory forget 1
+python main.py memory clear
+python main.py voice list
+python main.py voice install
+python main.py voice download ml_IN-meera-medium
+python main.py voice use ml_IN-meera-medium
+python main.py voice test
+python main.py voice delete en_US-amy-low
+python main.py delete "my-model.gguf"
+python main.py web
+python main.py native-chat
+```
+
+Inside enhanced `chat`: `/quit`, `/new`, `/remember FACT`, `/memory`, `/forget NUMBER`,
+`/clear`, `/unload`, `/load FILENAME`, `/stop-speech`. Ctrl+C during generation cancels
+and unloads the model; partial responses are not committed to memory. The GUI's
+**Stop generation + speech** also unloads the model to interrupt native inference.
+
+`load --model FILENAME` holds a model in the foreground until Enter. `web` also opens
+the native browser UI and prints its temporary API key. Paste that key into the native
+UI's API-key setting. Keys change every load and are not persisted in Nila configuration.
+Do not expose the server publicly or share its session key.
+
+## Loading and initialization settings
+
+Settings are validated and must be saved with the model unloaded in the GUI.
+Defaults: at most 4 CPU threads, context 2,048, batch/micro-batch 128, mmap loading,
+warmup enabled, one loaded model, 512 reply tokens, 300-second load timeout.
+
+`mmap` lets the OS map model files; `none` selects loading without that mode. Changing
+context/loading settings requires a reload. Autoload is optional and starts only an
+already-selected local model. No models/voices are downloaded on ordinary app startup.
+The low-memory preset uses shorter replies/history; it is not a hardware benchmark.
+
+## Limitations and troubleshooting
+
+- Windows x64 Intel/AMD only; CPU inference. No voice input/wake word in this release.
+- Single-file GGUF text models only; no split weights, projectors or non-GGUF formats.
+- Gated/private models must be downloaded independently and imported.
+- Downloads are atomic but not resumable. Failed/incomplete files are removed.
+- Runtime ZIP uses a pinned SHA-256. Custom model and voice downloads use HTTPS and
+  basic validation, not publisher-verified checksums. Use trusted sources.
+- Speech installation requires internet/PyPI and Python with compatible wheels.
+- DLL errors: check the official Microsoft Visual C++ x64 runtime.
+- Load failure: try a smaller compatible model, adjust timeout, or temporarily enable
+  diagnostic logs. Do not publicly share unredacted logs.
+- Port busy: choose a free local port and reload.
+- Wrong browser name: reset its saved system-message setting and start a new conversation.
 
 Program: `%LOCALAPPDATA%\Programs\LocalAssistant`.
-Data/models/runtime/logs: `%LOCALAPPDATA%\LocalAssistant`.
-For development/tests, `LOCAL_ASSISTANT_HOME` overrides the data directory.
-To uninstall, close the app, delete the program folder and desktop shortcut.
-Delete the data folder separately only if you want to remove downloaded models/settings.
-Browser chat data must be removed separately in browser settings.
+Data: `%LOCALAPPDATA%\LocalAssistant` (override with `LOCAL_ASSISTANT_HOME`).
+To uninstall, close the app and delete program/shortcut. Remove data separately only
+when you intend to remove downloaded models, voices, speech environment and memory.
 
-## GitHub publishing and executable builds
-
-Source is maintained at https://github.com/nadeemmhdm/nila-assistant. Do not commit model weights,
-runtime binaries, chat data or your local config. The `.gitignore` covers common cases.
-The included workflow runs tests on Windows, parses the installer, builds a standalone
-`LocalAssistant.exe` and uploads a ZIP artifact. That executable requires no separate
-Python installation, but still downloads llama.cpp and your chosen model at setup.
-
-After pushing: open **Actions → Windows build and tests → completed run → Artifacts**.
-Download `LocalAssistant-Windows-x64`, extract its inner ZIP, then run Setup.cmd.
-For easy public downloads without an Actions login, attach the inner ZIP and SHA256.txt
-to a GitHub Release after Windows smoke testing. No Release has been published yet.
-
-Developer build:
+## Development and validation
 
 ```powershell
 python -m unittest discover -s tests -v
 python -m pip install pyinstaller==6.16.0
-python -m PyInstaller --noconfirm --clean --onefile --name LocalAssistant --add-data "runtime.json;." main.py
+python -m PyInstaller --noconfirm --clean --onefile --name LocalAssistant --add-data "runtime.json;." --add-data "speech_worker.py;." --add-data "voice_setup.ps1;." main.py
 ```
 
-## Troubleshooting
+The Windows workflow runs unit tests (including actual DPAPI roundtrip), installer
+syntax checks and EXE smoke testing. Its separate integration job downloads a small
+model and English/Malayalam voices, verifies unauthorized API calls are rejected,
+streams a real reply, reloads encrypted memory and synthesizes in-memory WAV audio.
+Check the workflow result for the specific commit; code presence does not mean a test passed.
+Manual installation, physical speaker playback and performance on an 8 GB laptop still
+need real-user validation. No production security-audit claim is made.
 
-- Runtime download error: check internet access to GitHub release downloads.
-- DLL error: install the Microsoft Visual C++ x64 runtime from Microsoft's official site.
-- Slow/out-of-memory: choose a smaller model, close other apps, lower context size.
-- Port busy: change the port in Settings, then reopen Web Chat.
-- Server exits: inspect `%LOCALAPPDATA%\LocalAssistant\server.log`.
-- Invalid model: ensure a direct GGUF URL, not a model card HTML page.
-- Python absent and winget unavailable: install official Python x64 with Tcl/Tk, rerun Setup.cmd.
-- Corporate PowerShell restrictions: follow your administrator's policy; source can also
-  run with `python main.py` without running the installer.
+Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). Vulnerabilities: [SECURITY.md](SECURITY.md).
 
-## Validation status
+## License and credits
 
-Core automated tests run in the development environment with mocked downloads and
-processes. Real model inference, native Web UI, Windows installer execution and the
-Windows executable build still require a Windows smoke test. This is a preview,
-not a claim of production validation.
-
-## Windows smoke-test checklist
-
-- Clean Windows user: Setup.cmd detects/installs Python and creates shortcut.
-- Save an English or Malayalam name; restart and confirm it persists.
-- Install runtime, download a small GGUF and check download failure/cancel recovery.
-- Open Web Chat and ask its name; confirm real generated response and new-chat history.
-- Unload, open CLI, ask its name, and exit; verify no leftover llama process.
-- Import a model from a path with spaces; switch models and delete the managed copy.
-- Disconnect internet; test both chat modes again.
-- Test the Actions-built exe on a machine without Python.
-
-MIT licensed launcher. Third-party runtime and models retain their own licenses.
-See THIRD_PARTY.md.
-
-
-## Contributing
-
-Bug reports and focused pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
-for development and validation steps. Report security vulnerabilities privately as
-explained in [SECURITY.md](SECURITY.md), not in public issues.
-
-## Credits
-
-Created and maintained by [Nadeem Muhammed](https://github.com/nadeemmhdm).
-Inference and native chat interfaces are provided by the independent
-[llama.cpp](https://github.com/ggml-org/llama.cpp) project.
+MIT-licensed launcher by [Nadeem Muhammed](https://github.com/nadeemmhdm).
+[llama.cpp](https://github.com/ggml-org/llama.cpp) provides inference/native chat.
+Optional [Piper](https://github.com/OHF-Voice/piper1-gpl) is GPL-3.0-or-later software
+installed separately; model/voice licenses remain independent. No weights are included.
+See [THIRD_PARTY.md](THIRD_PARTY.md).

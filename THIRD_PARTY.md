@@ -15,3 +15,18 @@ https://pyinstaller.org/en/stable/license.html.
 Models retain their own licenses. Review the linked model card before downloading
 or redistributing weights. A GGUF format or free download does not by itself
 make a model open source. No model weights are included in this project.
+
+
+## Optional speech components
+
+Piper 1.8.0 (https://github.com/OHF-Voice/piper1-gpl) is GPL-3.0-or-later.
+It is installed from PyPI into a separate local Python environment and invoked by
+a subprocess helper; the Windows launcher EXE does not bundle Piper or voice weights.
+Piper's dependencies retain their licenses. Review those obligations before
+redistributing a speech-enabled environment. The MIT license applies to this
+project's own code and does not relicense its dependencies.
+
+Voices are downloaded from https://huggingface.co/rhasspy/piper-voices.
+Each download includes its MODEL_CARD; voice/dataset licenses can differ.
+The catalog offers en_US-amy-low, en_US-lessac-medium and ml_IN-meera-medium.
+These are general speech synthesis voices, not custom voice clones.

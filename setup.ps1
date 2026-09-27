@@ -46,7 +46,7 @@ try {
             if (-not $python) { throw 'Python was installed but could not be found. Reopen Setup.cmd.' }
         }
         if ($source -ne $destination) {
-            foreach ($file in @('main.py','runtime.json','README.md','LICENSE','THIRD_PARTY.md')) { Copy-Item (Join-Path $source $file) $destination -Force }
+            foreach ($file in @('main.py','runtime.json','README.md','LICENSE','THIRD_PARTY.md','speech_worker.py','voice_setup.ps1')) { Copy-Item (Join-Path $source $file) $destination -Force }
             New-Item -ItemType Directory -Force -Path (Join-Path $destination 'assistant') | Out-Null
             Copy-Item (Join-Path $source 'assistant\*.py') (Join-Path $destination 'assistant') -Force
         }

@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -157,19 +158,38 @@ class Manager:
         self.models = self.home / 'models'
         self.models.mkdir(parents=True, exist_ok=True)
         self.config_path = self.home / 'config.json'
-        self.config = {'name':'', 'model':'', 'threads':min(4, os.cpu_count() or 2), 'context':2048, 'port':8080}
+        self.config = {'name':'', 'model':'', 'threads':min(4, os.cpu_count() or 2), 'context':2048, 'port':8080,
+                       'batch':128, 'ubatch':128, 'load_mode':'mmap', 'warmup':True,
+                       'load_timeout':300, 'autoload':False, 'max_tokens':512, 'temperature':0.7,
+                       'use_memory':True, 'persist_memory':False, 'history_turns':12, 'memory_kb':256,
+                       'auto_speak':False, 'voice':'en_US-amy-low', 'speech_rate':1.0, 'debug_logs':False}
         if self.config_path.exists():
             self.config.update(json.loads(self.config_path.read_text(encoding='utf-8')))
         self.process = None
+        self.process_lock = threading.RLock()
+        self.api_key = ''
+        self.active_port = self.config['port']
+        self.active_context = self.config['context']
         self.log = None
         self.cancel = threading.Event()
 
     def save(self):
         validate_name(self.config['name'])
-        for key, lo, hi in [('threads',1,256),('context',512,32768),('port',1024,65535)]:
+        for key, lo, hi in [('threads',1,256),('context',512,32768),('port',1024,65535),('batch',32,2048),('ubatch',32,512),('load_timeout',30,900),('max_tokens',32,4096),('history_turns',0,200),('memory_kb',32,2048)]:
             if not lo <= int(self.config[key]) <= hi:
                 raise ValueError(f'{key} must be between {lo} and {hi}.')
             self.config[key] = int(self.config[key])
+        if self.config['ubatch'] > self.config['batch']:
+            raise ValueError('Micro-batch must not exceed batch size.')
+        if self.config['max_tokens'] >= self.config['context'] - 128:
+            raise ValueError('Maximum reply tokens must leave at least 128 context tokens for input.')
+        if self.config['load_mode'] not in ('mmap','none'):
+            raise ValueError('Load mode must be mmap or none.')
+        for key,lo,hi in [('temperature',0,2),('speech_rate',0.5,2.0)]:
+            self.config[key] = float(self.config[key])
+            if not lo <= self.config[key] <= hi: raise ValueError(f'{key} must be {lo}–{hi}.')
+        for key in ('warmup','autoload','use_memory','persist_memory','auto_speak','debug_logs'):
+            if not isinstance(self.config[key],bool): raise ValueError(f'{key} must be true or false.')
         atomic_json(self.config_path, self.config)
 
     def installed(self):
@@ -253,22 +273,25 @@ class Manager:
     def base_args(self, exe):
         self.save()
         return [str(self.executable(exe)), '-m',str(self.selected()), '-t',str(self.config['threads']),
-                '-c',str(self.config['context']), '-b','128','-ub','128','-ngl','0']
+                '-c',str(self.config['context']), '-b',str(self.config['batch']),
+                '-ub',str(self.config['ubatch']),'-ngl','0','--load-mode',self.config['load_mode'],
+                '--warmup' if self.config['warmup'] else '--no-warmup']
 
     def server_args(self):
         args = self.base_args('llama-server')
         ui_file = self.home / 'webui.json'
         atomic_json(ui_file, {'systemMessage':prompt(self.config['name']), 'showSystemMessage':True,
                              'titleGenerationUseLLM':False,'jsSandboxEnabled':False,'mcpServers':[],
-                             'temperature':0.7,'max_tokens':512})
+                             'temperature':self.config['temperature'],'max_tokens':self.config['max_tokens']})
         return args + ['--host','127.0.0.1','--port',str(self.config['port']),'-np','1',
-                       '--alias',self.config['name'],'--ui-config-file',str(ui_file)]
+                       '--alias',self.config['name'],'--ui-config-file',str(ui_file),'--cors-origins','localhost']
 
     def cli_args(self):
         return self.base_args('llama-cli') + ['-sys',prompt(self.config['name'])]
 
     def running(self):
-        return self.process is not None and self.process.poll() is None
+        process = self.process
+        return process is not None and process.poll() is None
 
     def start_ui(self, progress=print):
         if self.running():
@@ -279,9 +302,15 @@ class Manager:
                 sock.bind(('127.0.0.1', self.config['port']))
             except OSError as e:
                 raise ValueError('Port is already in use. Change the port in Settings.') from e
-        self.log = (self.home / 'server.log').open('w',encoding='utf-8')
+        self.api_key = secrets.token_urlsafe(32)
+        self.active_port = self.config['port']
+        self.active_context = self.config['context']
+        child_env = {k:v for k,v in os.environ.items() if not k.startswith('LLAMA_')}
+        child_env['LLAMA_API_KEY'] = self.api_key
+        self.log = ((self.home / 'server.log').open('w',encoding='utf-8')
+                    if self.config['debug_logs'] else open(os.devnull,'w'))
         try:
-            self.process = subprocess.Popen(args, stdout=self.log, stderr=subprocess.STDOUT,
+            self.process = subprocess.Popen(args, stdout=self.log, stderr=subprocess.STDOUT, env=child_env,
                                             creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         except BaseException:
             self.log.close()
@@ -290,20 +319,20 @@ class Manager:
         url = f"http://127.0.0.1:{self.config['port']}"
         progress('Loading model into memory…')
         try:
-            for _ in range(600):
+            for _ in range(self.config['load_timeout'] * 2):
                 if self.cancel.is_set():
                     raise Cancelled('Model loading cancelled.')
                 if not self.running():
-                    raise RuntimeError(f'llama-server stopped. Check {self.home / "server.log"}.')
+                    raise RuntimeError('llama-server stopped. Check your model/runtime; enable diagnostic logs in Settings for details.')
                 try:
                     with urlopen(url + '/health',timeout=.5) as res:
                         if res.status == 200:
-                            progress('Model ready. Web chat is running locally.')
+                            progress('Model ready. Protected local chat is running.')
                             return url
                 except OSError:
                     pass
                 time.sleep(.5)
-            raise TimeoutError('Model load timed out after 5 minutes. Try a smaller model.')
+            raise TimeoutError('Model load timed out. Try a smaller model or increase the load timeout.')
         except BaseException:
             self.stop()
             raise
@@ -314,18 +343,20 @@ class Manager:
         self.process = subprocess.Popen(self.cli_args(), creationflags=getattr(subprocess,'CREATE_NEW_CONSOLE',0))
 
     def stop(self):
-        if self.running():
-            if sys.platform == 'win32':
-                subprocess.run(['taskkill','/PID',str(self.process.pid),'/T','/F'],
-                               capture_output=True, creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-            else:
-                self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
-        self.process = None
-        if self.log:
-            self.log.close()
-            self.log = None
+        with self.process_lock:
+            if self.running():
+                if sys.platform == 'win32':
+                    subprocess.run(['taskkill','/PID',str(self.process.pid),'/T','/F'],
+                                   capture_output=True, creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                else:
+                    self.process.terminate()
+                try:
+                    self.process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait()
+            self.process = None
+            self.api_key = ''
+            if self.log:
+                self.log.close()
+                self.log = None
